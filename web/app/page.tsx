@@ -1,14 +1,8 @@
 import Link from "next/link";
-import { ArrowRight, MapPin, ShieldCheck, TrendingUp } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { PhotoBackdrop } from "@/components/brand/photo-backdrop";
 import { Button } from "@/components/ui/button";
-
-const STATS = [
-  { icon: MapPin, label: "2 pilot districts", sub: "Kirehe & Nyamasheke" },
-  { icon: TrendingUp, label: "1–8 week forecast", sub: "cases before they rise" },
-  { icon: ShieldCheck, label: "Verify-before-act", sub: "people make the call" },
-];
 
 export default function LandingPage() {
   return (
@@ -46,26 +40,6 @@ export default function LandingPage() {
           <Button asChild size="lg" variant="outline" className="h-11 w-full px-8 text-base sm:w-auto">
             <Link href="/login">Login</Link>
           </Button>
-        </div>
-
-        <div className="mt-7 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
-          {STATS.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.label}
-                className="flex items-center gap-3 rounded-xl border border-border bg-card/70 px-3.5 py-2.5 text-left backdrop-blur-sm"
-              >
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">{s.label}</p>
-                  <p className="text-xs text-muted-foreground">{s.sub}</p>
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         <p className="mt-6 text-xs text-slate-300/80">

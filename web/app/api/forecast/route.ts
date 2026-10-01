@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { callApi, local } from "@/lib/api";
 import { runForecast } from "@/lib/forecast";
 
 export async function POST(req: Request) {
@@ -7,12 +7,18 @@ export async function POST(req: Request) {
     const district = String(body.district ?? "");
     const weeks = Number(body.weeks ?? 3);
     if (!district) {
-      return NextResponse.json({ error: "district is required" }, { status: 400 });
+      return local({ error: "district is required" }, { status: 400 });
     }
+    const remote = await callApi("/api/forecast", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ district, weeks: Number.isFinite(weeks) ? weeks : 3 }),
+    });
+    if (remote) return remote;
     const result = runForecast(district, weeks);
-    return NextResponse.json(result);
+    return local(result);
   } catch (err) {
-    return NextResponse.json(
+    return local(
       { error: err instanceof Error ? err.message : "forecast failed" },
       { status: 400 },
     );
