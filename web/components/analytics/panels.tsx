@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Info } from "lucide-react";
+import { ArrowRight, BookOpen, Info, ListChecks, Lightbulb } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Legend, SeriesChart } from "@/components/charts/series-chart";
 import { LevelBadge } from "@/components/surveillance/level-badge";
 import { ANALYSES } from "@/lib/surveillance/catalog";
+import { interpret, type Action, type Priority } from "@/lib/surveillance/interpret";
 import { LEVEL_HEX, chartRows, fmt, fmtDate, signed } from "@/lib/surveillance/display";
 import type { Analytics, LagCorrelation } from "@/lib/surveillance/types";
 
@@ -43,9 +44,39 @@ function Note({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Panel({ id, a, children }: { id: string; a: Analytics; children: React.ReactNode }) {
+const PRIORITY: Record<Priority, { label: string; color: string; soft: string }> = {
+  high: { label: "Act now", color: "var(--risk-high)", soft: "var(--risk-high-soft)" },
+  medium: { label: "Review", color: "var(--risk-watch)", soft: "var(--risk-watch-soft)" },
+  routine: { label: "Routine", color: "var(--risk-low)", soft: "var(--risk-low-soft)" },
+};
+
+export function ActionItem({ action, source }: { action: Action; source?: React.ReactNode }) {
+  const p = PRIORITY[action.priority];
+  return (
+    <li className="flex items-start gap-2.5 text-sm">
+      <span
+        className="mt-0.5 w-16 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide"
+        style={{ color: p.color, background: p.soft }}
+      >
+        {p.label}
+      </span>
+      <span className="min-w-0">
+        {action.text}
+        {action.href && (
+          <Link href={action.href} className="ml-1.5 inline-flex items-center gap-0.5 whitespace-nowrap text-primary hover:underline">
+            {action.linkLabel ?? "Open"} <ArrowRight className="h-3 w-3" />
+          </Link>
+        )}
+        {source && <span className="mt-0.5 block text-[11px] text-muted-foreground">{source}</span>}
+      </span>
+    </li>
+  );
+}
+
+function Panel({ id, a, scopeParam, children }: { id: string; a: Analytics; scopeParam: string; children: React.ReactNode }) {
   const def = ANALYSES.find((d) => d.id === id);
   const reason = def?.unavailable(a) ?? null;
+  const read = reason ? null : interpret(id, a, scopeParam);
   return (
     <Card id={id} className="scroll-mt-24">
       <CardHeader className="pb-3">
@@ -56,11 +87,54 @@ function Panel({ id, a, children }: { id: string; a: Analytics; children: React.
         {def && <p className="text-xs text-muted-foreground">{def.description}</p>}
       </CardHeader>
       <CardContent>
-        {reason ? <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">Not available: {reason}.</p> : children}
+        {reason ? (
+          <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">Not available: {reason}.</p>
+        ) : (
+          <>
+            {read?.reading && (
+              <p className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <span>
+                  <span className="font-semibold text-foreground">How to read this: </span>
+                  {read.reading}
+                </span>
+              </p>
+            )}
+            {children}
+          </>
+        )}
         {!reason && a.totals.partial_weeks > 0 && (
           <p className="mt-2 text-[11px] text-muted-foreground">
             {a.totals.partial_weeks} week(s) not yet submitted by every reporting district are left blank in combined charts.
           </p>
+        )}
+        {read && (read.findings.length > 0 || read.actions.length > 0) && (
+          <div className="mt-5 grid gap-4 border-t border-border pt-4 lg:grid-cols-2">
+            <div className="min-w-0">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Lightbulb className="h-3.5 w-3.5 text-primary" /> What the data shows
+              </p>
+              {read.findings.length ? (
+                <ul className="list-disc space-y-1.5 pl-5 text-sm marker:text-muted-foreground">
+                  {read.findings.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No further findings for this scope.</p>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <ListChecks className="h-3.5 w-3.5 text-primary" /> Recommended actions
+              </p>
+              <ul className="space-y-2">
+                {read.actions.map((x) => (
+                  <ActionItem key={x.text} action={x} />
+                ))}
+              </ul>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -124,16 +198,18 @@ function LagHeatmap({ rows }: { rows: LagCorrelation[] }) {
 
 export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics; scopeParam: string }) {
   const w = a.weekly;
-  const l = a.latest;
+  // Headline figures use the latest week every reporting district has submitted.
+  const wc = w.filter((p) => p.complete);
+  const l = wc.length ? wc[wc.length - 1] : a.latest;
   const t = a.totals;
   const combined = a.scope.level !== "district";
 
   switch (id) {
     case "cases_trend": {
-      const last4 = sum(w.slice(-4).map((p) => p.confirmed));
-      const prev4 = sum(w.slice(-8, -4).map((p) => p.confirmed));
+      const last4 = sum(wc.slice(-4).map((p) => p.confirmed));
+      const prev4 = wc.length >= 8 ? sum(wc.slice(-8, -4).map((p) => p.confirmed)) : null;
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Latest week" value={fmt(l?.confirmed)} sub={l ? fmtDate(l.week_start) : undefined} />
             <Stat label="vs recent baseline" value={signed(l?.change_vs_baseline_pct, 1, "%")} sub={`baseline ${fmt(l?.baseline_prev4, 1)}`} />
@@ -166,7 +242,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
     }
     case "testing_cascade":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Suspected (period)" value={fmt(t.suspected)} />
             <Stat label="Tested (period)" value={fmt(t.tested)} sub={`Testing rate ${fmt(t.testing_rate_pct, 1)}%`} />
@@ -195,7 +271,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "positivity":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Latest week" value={`${fmt(l?.positivity_pct, 2)}%`} />
             <Stat label="vs previous 4 weeks" value={`${signed(l?.positivity_change_pp, 2)} pp`} />
@@ -219,7 +295,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "incidence":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Latest week" value={fmt(l?.incidence_per_1000, 3)} sub="per 1,000" />
             <Stat label="Cumulative (period)" value={fmt(t.incidence_per_1000, 2)} sub="per 1,000 population at risk" />
@@ -234,7 +310,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "severity":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Severe cases" value={fmt(t.severe)} sub={`${fmt(t.severe_pct_of_confirmed, 2)}% of confirmed`} />
             <Stat label="Admissions" value={fmt(t.admissions)} sub={`${fmt(t.admissions_per_100_confirmed, 2)} per 100 confirmed`} />
@@ -261,7 +337,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "opd_share":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Latest week" value={`${fmt(l?.opd_malaria_share_pct, 1)}%`} />
             <Stat label="Period" value={`${fmt(t.opd_malaria_share_pct, 1)}%`} sub="Σ confirmed ÷ Σ outpatient visits" />
@@ -277,7 +353,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "baseline_deviation":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             leftUnit="%"
             data={chartRows(w, ["change_vs_baseline_pct"])}
@@ -289,7 +365,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "anomaly":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             data={chartRows(w, ["z_prev8"])}
             series={[{ key: "z_prev8", label: "Anomaly score (z)", color: C.gold, decimals: 2, levelKey: "level" }]}
@@ -307,7 +383,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "signal_timeline":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <div className="max-h-[520px] overflow-auto rounded-lg border border-border">
             <Table>
               <TableHeader className="sticky top-0 bg-card">
@@ -357,7 +433,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       ];
       if (shown.length && rows.length > shown.length) rows[obs.length - 1].estimate = obs[obs.length - 1]?.confirmed ?? null;
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           {shown.length ? (
             <>
               <SeriesChart
@@ -429,7 +505,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
     }
     case "rainfall":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             data={chartRows(w, ["rainfall_mm", "rainfall_4wk_avg", "confirmed"])}
             series={[
@@ -459,7 +535,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "climate":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             rightUnit="%"
             data={chartRows(w, ["temperature_c", "humidity_pct"])}
@@ -473,7 +549,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "vector":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             data={chartRows(w, ["mosquito_density", "larval_density"])}
             series={[
@@ -486,7 +562,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "vegetation_mobility":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             data={chartRows(w, ["ndvi", "mobility_index"])}
             series={[
@@ -499,7 +575,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "env_lag":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <LagHeatmap rows={a.relationships.filter((r) => r.best)} />
           <Note>
             {a.method.find((m) => m.key === "relationships")?.rule} Gold = positive, blue = negative; the outlined cell is the
@@ -509,7 +585,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "reporting":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Latest completeness" value={`${fmt(l?.reporting_completeness_pct, 1)}%`} />
             <Stat label="Average completeness" value={`${fmt(a.quality.reporting_completeness.mean, 1)}%`} sub={`${a.quality.reporting_completeness.weeks_below_90} district-weeks below 90%`} />
@@ -531,7 +607,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       );
     case "facilities":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             data={chartRows(w, ["facilities_expected", "facilities_reporting"])}
             series={[
@@ -546,7 +622,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       const minAct = Math.min(...w.map((p) => p.act_stock_days ?? Infinity));
       const minRdt = Math.min(...w.map((p) => p.rdt_stock_days ?? Infinity));
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="ACT stock (latest)" value={`${fmt(l?.act_stock_days, combined ? 1 : 0)} days`} sub={`lowest ${fmt(Number.isFinite(minAct) ? minAct : null, combined ? 1 : 0)}`} />
             <Stat label="RDT stock (latest)" value={`${fmt(l?.rdt_stock_days, combined ? 1 : 0)} days`} sub={`lowest ${fmt(Number.isFinite(minRdt) ? minRdt : null, combined ? 1 : 0)}`} />
@@ -573,7 +649,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
     }
     case "beds":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <SeriesChart
             rightUnit="%"
             data={chartRows(w, ["admissions", "bed_occupancy_pct"])}
@@ -588,7 +664,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
     case "prevention_coverage": {
       const rel = a.relationships.filter((r) => r.group === "prevention" && r.best);
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Bed-net coverage (latest)" value={`${fmt(l?.bed_net_coverage_pct, 1)}%`} />
             <Stat label="IRS coverage (latest)" value={`${fmt(l?.irs_pct, 1)}%`} />
@@ -616,7 +692,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
     }
     case "prioritisation":
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -663,7 +739,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       const rows = a.districts.filter((d) => d.hasData);
       const noData = a.districts.length - rows.length;
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -717,7 +793,7 @@ export function AnalysisPanel({ id, a, scopeParam }: { id: string; a: Analytics;
       const q = a.quality;
       const missing = q.missing_by_column.filter((c) => c.missing > 0);
       return (
-        <Panel id={id} a={a}>
+        <Panel id={id} a={a} scopeParam={scopeParam}>
           <Stats>
             <Stat label="Records" value={fmt(q.records)} sub={Object.entries(q.weeks_per_district).map(([d, n]) => `${d} ${n}`).join(" · ")} />
             <Stat label="Missing values" value={fmt(q.missing_values_total)} sub={missing.length ? missing.map((c) => c.column).join(", ") : "none in supplied columns"} />

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, History, Play, X } from "lucide-react";
+import { Check, History, Play, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ANALYSES, CATEGORIES, PRESETS } from "@/lib/surveillance/catalog";
@@ -14,10 +14,13 @@ const STORAGE_KEY = "umuburo.analytics.selection";
 export function AnalysisPicker({
   selected,
   availability,
+  suggested = [],
   compact = false,
 }: {
   selected: string[];
   availability: Record<string, string | null>;
+  /** Analyses suggested by the current data, with the reason. */
+  suggested?: { id: string; reason: string }[];
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -104,6 +107,53 @@ export function AnalysisPicker({
             </Button>
           </div>
         </div>
+
+        {suggested.length > 0 && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Sparkles className="h-4 w-4 text-primary" /> Suggested for the current data
+                </p>
+                <p className="text-xs text-muted-foreground">Based on what the latest imported weeks show for this scope.</p>
+              </div>
+              <Button size="sm" onClick={() => run(suggested.map((s) => s.id))}>
+                <Play className="h-4 w-4" /> Run suggested ({suggested.length})
+              </Button>
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {suggested.map((s) => {
+                const def = ANALYSES.find((a) => a.id === s.id);
+                const on = picked.includes(s.id);
+                return (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggle(s.id)}
+                      className={cn(
+                        "flex w-full items-start gap-2.5 rounded-md border px-3 py-2 text-left transition-colors",
+                        on ? "border-primary/60 bg-primary/10" : "border-border bg-card hover:border-primary/40",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border",
+                          on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50",
+                        )}
+                      >
+                        {on && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium leading-tight">{def?.title}</span>
+                        <span className="block text-[11px] leading-snug text-muted-foreground">{s.reason}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {CATEGORIES.map((cat) => (

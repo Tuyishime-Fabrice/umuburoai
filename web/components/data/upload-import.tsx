@@ -227,9 +227,12 @@ export function UploadImport({ restrictDistrict }: { restrictDistrict: string | 
             </div>
             <div className="flex gap-2 sm:ml-auto">
               <Button asChild size="sm">
-                <Link href="/overview">
-                  View situation <ArrowRight className="h-4 w-4" />
+                <Link href="/analytics">
+                  Choose analytics <ArrowRight className="h-4 w-4" />
                 </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/overview">View situation</Link>
               </Button>
               <Button size="sm" variant="outline" onClick={reset}>
                 Upload another
