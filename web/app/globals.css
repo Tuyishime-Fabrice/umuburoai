@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+  Umuburo AI — dark, high-contrast health-intelligence theme.
+  Two brand colours only: gold (brand) + white on deep navy.
+  Risk scale: green (normal) · amber (watch) · red (high).
+*/
+
+:root {
+  --background: #070b14;
+  --foreground: #e8eef9;
+
+  --card: #0e1626;
+  --card-foreground: #e8eef9;
+  --popover: #101a2e;
+  --popover-foreground: #e8eef9;
+
+  --primary: #f5b301; /* brand gold */
+  --primary-foreground: #1a1300;
+
+  --secondary: #16223a;
+  --secondary-foreground: #cdd8ec;
+
+  --muted: #101a2e;
+  --muted-foreground: #8fa1c0;
+
+  --accent: #16223a;
+  --accent-foreground: #e8eef9;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #fef2f2;
+
+  --border: #1e2a44;
+  --input: #22304d;
+  --ring: #f5b301;
+
+  --risk-low: #22c55e;
+  --risk-watch: #f59e0b;
+  --risk-high: #ef4444;
+  --risk-low-soft: rgba(34, 197, 94, 0.14);
+  --risk-watch-soft: rgba(245, 158, 11, 0.16);
+  --risk-high-soft: rgba(239, 68, 68, 0.16);
+
+  --chart-actual: #e8eef9;
+  --chart-baseline: #5b6b8a;
+  --chart-forecast: #f5b301;
+
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-risk-low: var(--risk-low);
+  --color-risk-watch: var(--risk-watch);
+  --color-risk-high: var(--risk-high);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 {
+  font-family: var(--font-display), var(--font-inter), ui-sans-serif, sans-serif;
+  letter-spacing: -0.015em;
+}
+
+/* Subtle scrollbar to match the dark product feel */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #223050;
+  border-radius: 999px;
+  border: 2px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2c3d63;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+@keyframes scan {
+  0% { transform: translateY(-100%); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateY(1200%); opacity: 0; }
+}
+.animate-scan { animation: scan 1.8s ease-in-out infinite; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: rise 0.5s ease-out both; }
+
+/* Leaflet dark tweaks */
+.leaflet-container { background: #0b1220 !important; font-family: inherit; }
+/* Darken the keyless OpenStreetMap tiles to match the theme (tiles only — markers/popups live in other panes). */
+.leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) grayscale(0.16);
+}
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #101a2e; color: #e8eef9; border: 1px solid #1e2a44;
+}
+.leaflet-bar a { background: #101a2e; color: #e8eef9; border-color: #1e2a44; }
+.leaflet-bar a:hover { background: #16223a; }
