@@ -23,12 +23,12 @@ export default function LandingPage() {
         </span>
 
         <h1 className="mt-4 text-balance text-3xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl">
-          Forecast malaria risk <span className="text-primary">before</span> it becomes an outbreak.
+          Spot unusual malaria signals <span className="text-primary">early</span> — and verify them.
         </h1>
 
         <p className="mt-4 max-w-xl text-pretty text-sm leading-relaxed text-slate-200/90 sm:text-base">
-          Umuburo AI turns surveillance, historical, geographic and climate data into clear,
-          three-week risk forecasts for Kirehe and Nyamasheke — so district teams can act early.
+          Umuburo AI compares each week&apos;s malaria surveillance data with its recent baseline, flags
+          unusual increases with the reasons behind them, and leaves the decision to district health teams.
         </p>
 
         <div className="mt-6 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
@@ -43,7 +43,7 @@ export default function LandingPage() {
         </div>
 
         <p className="mt-6 text-xs text-slate-300/80">
-          Grounded in the national Malaria &amp; NTD Annual Report (FY2023-24).
+          Current analytics are calculated from a weekly district surveillance test dataset.
         </p>
       </div>
     </div>

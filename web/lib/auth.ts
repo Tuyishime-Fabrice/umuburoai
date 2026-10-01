@@ -29,17 +29,17 @@ export const DEMO_ACCOUNTS: Array<Session & { password: string }> = [
   },
   {
     name: "Jean-Bosco N.",
-    email: "kirehe@umuburo.rw",
+    email: "nyagatare@umuburo.rw",
     password: "demo",
     role: "district",
-    district: "Kirehe",
+    district: "Nyagatare",
   },
   {
     name: "Claudine M.",
-    email: "nyamasheke@umuburo.rw",
+    email: "muhanga@umuburo.rw",
     password: "demo",
     role: "district",
-    district: "Nyamasheke",
+    district: "Muhanga",
   },
 ];
 

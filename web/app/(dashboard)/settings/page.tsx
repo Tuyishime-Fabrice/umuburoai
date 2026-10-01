@@ -1,27 +1,17 @@
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { getMeta } from "@/lib/data";
-import { getSession } from "@/lib/session.server";
 import { ROLE_LABELS } from "@/lib/auth";
-
-const MODEL_LABELS: Record<string, string> = {
-  baseline: "Baseline",
-  anomaly: "Anomaly detection",
-  forecast: "Forecast",
-  risk: "Risk fusion",
-  allocation: "Resource allocation",
-};
+import { fmtDate } from "@/lib/surveillance/display";
+import { getScopedAnalytics } from "@/lib/surveillance/source";
+import { getSession } from "@/lib/session.server";
 
 export default async function SettingsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  const meta = getMeta();
+  const { analytics: a, computedBy, allowedScopes } = await getScopedAnalytics(session, "All");
 
   const scope =
-    session.role === "national"
-      ? "All districts (national)"
-      : `${session.district ?? "—"} (${session.role})`;
+    session.role === "national" ? "All districts in the dataset" : `${session.district ?? "—"} only`;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -39,13 +29,27 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Model</CardTitle>
+          <CardTitle className="text-base">Data source</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field label="File" value={a.source.file} />
+          <Field label="Rows × columns" value={`${a.source.rows} × ${a.source.columns}`} />
+          <Field label="Districts" value={allowedScopes.filter((s) => s !== "All").join(", ")} />
+          <Field label="Period" value={`${fmtDate(a.period.start)} – ${fmtDate(a.period.end)}`} />
+          <Field label="Calculated by" value={computedBy === "api" ? "Umuburo API (FastAPI)" : "This web server"} />
+          <Field label="Live connections" value="None — no DHIS2, eLMIS or other live feed is connected" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Signal rules</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {Object.entries(meta.model).map(([k, v]) => (
-            <div key={k} className="grid gap-1 sm:grid-cols-[160px_1fr]">
-              <span className="text-sm font-medium">{MODEL_LABELS[k] ?? k}</span>
-              <span className="text-sm text-muted-foreground">{v}</span>
+          {a.method.map((m) => (
+            <div key={m.key} className="grid gap-1 sm:grid-cols-[180px_1fr]">
+              <span className="text-sm font-medium">{m.label}</span>
+              <span className="text-sm text-muted-foreground">{m.rule}</span>
             </div>
           ))}
         </CardContent>
@@ -53,29 +57,17 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Notifications</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            ["Alert emails for High-risk flags", true],
-            ["Weekly forecast digest", true],
-            ["Watch-level notifications", false],
-          ].map(([label, on]) => (
-            <div key={label as string} className="flex items-center justify-between">
-              <span className="text-sm">{label}</span>
-              <Badge variant={on ? "default" : "muted"}>{on ? "On" : "Off"}</Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Data &amp; responsibility</CardTitle>
+          <CardTitle className="text-base">Responsibility</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>{meta.data_status}</p>
-          <p className="text-foreground">{meta.human_in_the_loop}</p>
+          <p>
+            The analytics use only the surveillance CSV listed above. It contains weekly district-level counts —
+            no patient-level records. Replacing the file updates every figure.
+          </p>
+          <p className="text-foreground">
+            Umuburo AI flags signals for review. The district health team verifies each signal and decides what,
+            if anything, to do. A signal is not a confirmed outbreak.
+          </p>
         </CardContent>
       </Card>
 

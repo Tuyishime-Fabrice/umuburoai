@@ -17,7 +17,7 @@ const DEFAULT_PASSWORD = "demo";
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/overview";
+  const next = params.get("next") || "/monitor";
   const [email, setEmail] = useState(DEFAULT_EMAIL);
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPw, setShowPw] = useState(false);
@@ -55,7 +55,7 @@ export function LoginForm() {
     <div className="w-full">
       <h2 className="text-2xl font-bold tracking-tight">Sign in</h2>
       <p className="mt-1.5 text-sm text-muted-foreground">
-        Access your early-warning workspace.
+        Access your surveillance workspace.
       </p>
 
       <form onSubmit={onSubmit} className="mt-7 space-y-5">
