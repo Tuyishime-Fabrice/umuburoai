@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ShieldCheck, Upload, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatasetTable, type DatasetRow } from "@/components/data/dataset-table";
 import { UploadImport } from "@/components/data/upload-import";
@@ -56,6 +57,56 @@ export default async function DataPage({
         title="Data Management"
         description="Upload weekly surveillance reports, manage imported datasets and review data quality."
       />
+
+      <ol className="grid gap-3 md:grid-cols-3">
+        {[
+          {
+            n: 1,
+            icon: Upload,
+            title: "Upload weekly data",
+            text: districtUser
+              ? `Import this week's report for ${districtUser} District below.`
+              : "Import weekly district reports below. Each upload is validated before import.",
+            href: null,
+            cta: null,
+          },
+          {
+            n: 2,
+            icon: BarChart3,
+            title: "Choose analytics",
+            text: "Pick the analyses you need, or run the ones suggested for the latest data.",
+            href: "/analytics",
+            cta: "Open Analytics",
+          },
+          {
+            n: 3,
+            icon: ShieldCheck,
+            title: "Verify signals",
+            text: a.alerts.filter((x) => x.isLatestWeek).length
+              ? `${a.alerts.filter((x) => x.isLatestWeek).length} signal(s) in the latest week need a verification decision.`
+              : "Review flagged weeks and record a verification decision.",
+            href: "/alerts",
+            cta: "Open Alerts",
+          },
+        ].map((s) => (
+          <li key={s.n} className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+              {s.n}
+            </span>
+            <div className="min-w-0 text-sm">
+              <p className="flex items-center gap-1.5 font-semibold">
+                <s.icon className="h-4 w-4 text-muted-foreground" /> {s.title}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{s.text}</p>
+              {s.href && (
+                <Link href={s.href} className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                  {s.cta} <ArrowRight className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
 
       <UploadImport restrictDistrict={districtUser} />
 

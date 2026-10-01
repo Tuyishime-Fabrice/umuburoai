@@ -16,10 +16,10 @@ decision.
 | Area | What users get |
 |---|---|
 | **Situation Overview** | Latest fully reported week, national map of district signals, signals awaiting verification, generated key findings, trend, reporting coverage by province, recent imports |
-| **Analytics** | A catalogue of 23 analyses — users choose what to run (or start from a preset) for the nation, a province or a district |
+| **Analytics** | A catalogue of 23 analyses — users choose what to run (or run the ones suggested for the latest data) for the nation, a province or a district. Each analysis explains how to read it, states what the data shows and lists recommended actions with the condition that triggered them; a summary collects the actions across the selected analyses |
 | **Alerts & Verification** | One alert per district-week where a case-based rule fired, with the rules, values, context, data-confidence notes and a checklist; decisions (verified / under investigation / not confirmed) are recorded with reviewer and time |
 | **Districts** | All 30 districts by province: reporting status, freshness, latest signal; a profile per district |
-| **Data Management** | Upload → validate → import CSV files; dataset register (who, when, period, districts); removal; combined data-quality report; CSV template |
+| **Data Management** | Landing page after sign-in. Upload → validate → import CSV files; dataset register (who, when, period, districts); removal; combined data-quality report; CSV template |
 | **Settings & Methods** | Account, processing status, and every rule and threshold |
 
 ### Analysis catalogue
@@ -31,6 +31,7 @@ decision.
 - **Comparison & data quality:** district comparison · data quality
 
 Analyses that need columns a dataset did not supply are shown as unavailable, never estimated.
+Recommended actions (`web/lib/surveillance/interpret.ts`) are prompts for the team to review; each states the threshold it uses.
 
 ### How signals are produced
 `web/lib/surveillance/pipeline.ts` (identical implementation in `backend/analytics.py`;
