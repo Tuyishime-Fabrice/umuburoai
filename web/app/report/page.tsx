@@ -1,17 +1,17 @@
 import { redirect } from "next/navigation";
 import { PrintButton } from "@/components/report/print-button";
-import { LEVEL_HEX, LEVEL_META, fmt, fmtDate, scopeName, signed } from "@/lib/surveillance/display";
+import { LEVEL_HEX, LEVEL_META, fmt, fmtDate, signed } from "@/lib/surveillance/display";
 import { getScopedAnalytics } from "@/lib/surveillance/source";
 import { getSession } from "@/lib/session.server";
 
 export default async function ReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ district?: string }>;
+  searchParams: Promise<{ scope?: string }>;
 }) {
   const session = await getSession();
   if (!session) redirect("/login");
-  const { analytics: a } = await getScopedAnalytics(session, (await searchParams).district);
+  const { analytics: a } = await getScopedAnalytics(session, (await searchParams).scope);
   const l = a.latest;
   const t = a.totals;
   const q = a.quality;
@@ -36,9 +36,9 @@ export default async function ReportPage({
 
         <div className="mt-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">{scopeName(a.scope)}</h1>
+            <h1 className="text-2xl font-bold">{a.scope.level === "district" ? `${a.scope.label} District` : a.scope.label}</h1>
             <p className="text-sm text-slate-500">
-              {a.districts.join(", ")} · {fmtDate(a.period.start)} – {fmtDate(a.period.end)} ({a.period.weeks} weeks)
+              {a.districtsWithData.join(", ") || "No reporting districts"} · {fmtDate(a.period.start)} – {fmtDate(a.period.end)} ({a.period.weeks} weeks)
             </p>
           </div>
           <PrintButton />
@@ -133,9 +133,9 @@ export default async function ReportPage({
         </section>
 
         <footer className="mt-8 border-t border-slate-200 pt-4 text-xs text-slate-500">
-          Calculated from {a.source.file} ({a.source.rows} rows). Signals are rule-based flags for verification by
-          the district health team — they do not confirm an outbreak. No forecast is included. Generated for{" "}
-          {session.name}.
+          Calculated from {a.sources.filter((x) => x.accepted).length} imported dataset(s) covering {a.coverage.districts_with_data} of{" "}
+          {a.coverage.districts_total} districts in scope. Signals are rule-based flags for verification by the district
+          health team — they do not confirm an outbreak. Generated for {session.name} on {fmtDate(a.today)}.
         </footer>
       </div>
     </div>

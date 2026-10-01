@@ -17,7 +17,7 @@ const DEFAULT_PASSWORD = "demo";
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/monitor";
+  const next = params.get("next") || "/overview";
   const [email, setEmail] = useState(DEFAULT_EMAIL);
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPw, setShowPw] = useState(false);
