@@ -5,6 +5,8 @@ WORKDIR /app
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# The surveillance CSV (single source of truth, shared with the API) is read at runtime.
+COPY backend/data/rwanda_malaria_surveillance_testing_data.csv ./data/
 RUN npm run build
 
 FROM node:22-slim

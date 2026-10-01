@@ -1,16 +1,39 @@
+import { redirect } from "next/navigation";
 import { AlertsView } from "@/components/alerts/alerts-view";
-import { getAlerts, getNational } from "@/lib/data";
+import { KpiTile } from "@/components/surveillance/kpi-tile";
+import { PageHeader } from "@/components/surveillance/page-header";
+import { LEVEL_META, fmtDate } from "@/lib/surveillance/display";
+import { getScopedAnalytics } from "@/lib/surveillance/source";
+import { getSession } from "@/lib/session.server";
 
-export default function AlertsPage() {
-  const alerts = getAlerts();
-  const national = getNational();
+export default async function AlertsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ district?: string }>;
+}) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const data = await getScopedAnalytics(session, (await searchParams).district);
+  const a = data.analytics;
+  const latest = a.alerts.filter((x) => x.isLatestWeek);
+
   return (
-    <div className="space-y-5">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        Signals the model flagged for human review. Each shows why it fired and what to confirm
-        <span className="text-foreground"> before</span> any response.
-      </p>
-      <AlertsView alerts={alerts} asOf={national.as_of} epiWeek={national.epi_week} />
+    <div className="space-y-6">
+      <PageHeader
+        data={data}
+        intro="Alerts are generated only from observations in the CSV, one per district-week where a case-based rule fired. The system flags a signal; the health team verifies and decides."
+      />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <KpiTile label="Alerts in latest week" value={String(latest.length)} sub={`Week of ${fmtDate(a.period.end)}`} />
+        <KpiTile label="Alerts in dataset period" value={String(a.alerts.length)} sub={`${a.period.weeks} weeks × ${a.districts.length} district(s)`} />
+        <KpiTile
+          label="Elevated signal"
+          value={String(a.alerts.filter((x) => x.level === "ELEVATED").length)}
+          tone={LEVEL_META.ELEVATED.color}
+        />
+        <KpiTile label="Watch" value={String(a.alerts.filter((x) => x.level === "WATCH").length)} tone={LEVEL_META.WATCH.color} />
+      </div>
+      <AlertsView alerts={a.alerts} />
     </div>
   );
 }

@@ -2,122 +2,86 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
 import {
   AlertTriangle,
-  Bell,
   CheckCircle2,
-  Clock,
+  CloudRain,
   Eye,
   FileDown,
   ListChecks,
-  Send,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { RiskBadge } from "@/components/risk-badge";
-import { RISK_META } from "@/lib/risk";
-import type { Alert, RiskLevel } from "@/lib/types";
+import { LevelBadge } from "@/components/surveillance/level-badge";
+import { LEVEL_META, fmtDate } from "@/lib/surveillance/display";
+import type { SignalItem, SurveillanceAlert } from "@/lib/surveillance/types";
 import { cn } from "@/lib/utils";
 
-const PILOTS = ["Kirehe", "Nyamasheke"];
-type Filter = "all" | "HIGH" | "WATCH";
+type Filter = "all" | "latest" | "ELEVATED" | "WATCH";
+type Review = "verified" | "not_confirmed";
 
-function alertId(a: Alert) {
-  return `${a.district}-${a.scope}-${a.headline}`;
-}
-
-export function AlertsView({
-  alerts,
-  asOf,
-  epiWeek,
-}: {
-  alerts: Alert[];
-  asOf: string;
-  epiWeek: string;
-}) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const [verified, setVerified] = useState<Set<string>>(new Set());
+export function AlertsView({ alerts }: { alerts: SurveillanceAlert[] }) {
+  const [filter, setFilter] = useState<Filter>(alerts.some((a) => a.isLatestWeek) ? "latest" : "all");
+  const [review, setReview] = useState<Record<string, Review>>({});
 
   const counts = useMemo(
     () => ({
       all: alerts.length,
-      HIGH: alerts.filter((a) => a.level === "HIGH").length,
+      latest: alerts.filter((a) => a.isLatestWeek).length,
+      ELEVATED: alerts.filter((a) => a.level === "ELEVATED").length,
       WATCH: alerts.filter((a) => a.level === "WATCH").length,
     }),
     [alerts],
   );
+  const shown = alerts.filter((a) =>
+    filter === "all" ? true : filter === "latest" ? a.isLatestWeek : a.level === filter,
+  );
 
-  const shown = alerts.filter((a) => filter === "all" || a.level === filter);
-
-  function toggleVerified(id: string) {
-    setVerified((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else {
-        next.add(id);
-        toast.success("Signal marked verified — you can now prepare a response.");
-      }
-      return next;
-    });
-  }
+  const tabs: [Filter, string][] = [
+    ["latest", `Latest week (${counts.latest})`],
+    ["all", `All in period (${counts.all})`],
+    ["ELEVATED", `Elevated (${counts.ELEVATED})`],
+    ["WATCH", `Watch (${counts.WATCH})`],
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* summary */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <SummaryTile label="Active alerts" value={counts.all} icon={Bell} />
-        <SummaryTile label="High risk" value={counts.HIGH} icon={AlertTriangle} tone="HIGH" />
-        <SummaryTile label="Watch" value={counts.WATCH} icon={Eye} tone="WATCH" />
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Last updated
-          </p>
-          <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold">
-            <Clock className="h-4 w-4 text-muted-foreground" /> {asOf}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">epi week {epiWeek}</p>
-        </Card>
+    <div className="space-y-5">
+      <div className="inline-flex flex-wrap rounded-lg border border-border bg-card p-1">
+        {tabs.map(([f, label]) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              filter === f ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* filters */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-border bg-card p-1">
-          {(
-            [
-              ["all", `All (${counts.all})`],
-              ["HIGH", `High (${counts.HIGH})`],
-              ["WATCH", `Watch (${counts.WATCH})`],
-            ] as [Filter, string][]
-          ).map(([f, label]) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                filter === f ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* cards */}
       <div className="grid gap-4">
         {shown.map((a) => (
           <AlertItem
-            key={alertId(a)}
+            key={a.id}
             alert={a}
-            verified={verified.has(alertId(a))}
-            onVerify={() => toggleVerified(alertId(a))}
+            review={review[a.id]}
+            onReview={(r) =>
+              setReview((prev) => {
+                const next = { ...prev };
+                if (next[a.id] === r) delete next[a.id];
+                else next[a.id] = r;
+                return next;
+              })
+            }
           />
         ))}
         {shown.length === 0 && (
           <Card className="p-10 text-center text-sm text-muted-foreground">
-            No alerts at this level.
+            No alerts for this filter. Alerts appear only when a case-based rule fires in the data.
           </Card>
         )}
       </div>
@@ -125,158 +89,108 @@ export function AlertsView({
   );
 }
 
-function SummaryTile({
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: number;
-  icon: typeof Bell;
-  tone?: RiskLevel;
-}) {
-  const color = tone ? RISK_META[tone].color : undefined;
+function Items({ title, items, icon: Icon, color }: { title: string; items: SignalItem[]; icon: typeof Eye; color: string }) {
+  if (!items.length) return null;
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {label}
-          </p>
-          <p className="mt-2 text-3xl font-bold" style={color ? { color } : undefined}>
-            {value}
-          </p>
-        </div>
-        <div
-          className="grid h-9 w-9 place-items-center rounded-lg"
-          style={{
-            background: color ? color + "1f" : "var(--muted)",
-            color: color ?? "var(--muted-foreground)",
-          }}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </Card>
+    <div>
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color }}>
+        <Icon className="h-3.5 w-3.5" /> {title}
+      </p>
+      <ul className="mt-1.5 space-y-1">
+        {items.map((s) => (
+          <li key={s.key} className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{s.label}.</span> {s.detail}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function AlertItem({
   alert,
-  verified,
-  onVerify,
+  review,
+  onReview,
 }: {
-  alert: Alert;
-  verified: boolean;
-  onVerify: () => void;
+  alert: SurveillanceAlert;
+  review?: Review;
+  onReview: (r: Review) => void;
 }) {
-  const m = RISK_META[alert.level];
-  const reportDistrict = PILOTS.includes(alert.district) ? alert.district : "Nyamasheke";
-  const Icon = alert.level === "HIGH" ? AlertTriangle : Eye;
-
+  const m = LEVEL_META[alert.level];
   return (
     <Card className="relative overflow-hidden">
       <div className="absolute inset-y-0 left-0 w-1" style={{ background: m.color }} aria-hidden />
       <CardContent className="p-5 pl-6">
-        {/* header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div
-              className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg"
-              style={{ background: m.soft, color: m.color }}
-            >
-              <Icon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <RiskBadge level={alert.level} size="sm" />
-                <span className="text-xs text-muted-foreground">
-                  {alert.scope === "sector"
-                    ? `${alert.district} · ${alert.sector}`
-                    : `${alert.district} district`}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <LevelBadge level={alert.level} size="sm" />
+              <span className="text-xs text-muted-foreground">
+                {alert.district} · week of {fmtDate(alert.week_start)}
+                {alert.isLatestWeek ? " · latest week" : ""}
+              </span>
+              {review && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={{
+                    background: review === "verified" ? "var(--risk-low-soft)" : "var(--muted)",
+                    color: review === "verified" ? "var(--risk-low)" : "var(--muted-foreground)",
+                  }}
+                >
+                  {review === "verified" ? "Verified by reviewer" : "Not confirmed by reviewer"}
                 </span>
-                {verified && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--risk-low-soft)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--risk-low)]">
-                    <CheckCircle2 className="h-3 w-3" /> Verified
-                  </span>
-                )}
-              </div>
-              <h3 className="mt-2 font-semibold leading-snug">{alert.headline}</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{alert.signal}</p>
+              )}
             </div>
+            <h3 className="mt-2 font-semibold leading-snug">{alert.headline}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{alert.summary}</p>
           </div>
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-            {alert.confidence} confidence
+            Requires verification
           </span>
         </div>
 
-        {/* drivers + verify */}
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg bg-muted/40 p-3">
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <ListChecks className="h-3.5 w-3.5" /> Why this fired
-            </p>
-            <ul className="mt-2 space-y-1">
-              {alert.drivers.map((d) => (
-                <li key={d} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-                  {d}
-                </li>
-              ))}
-            </ul>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-3 rounded-lg bg-muted/40 p-3">
+            <Items title="Why this signal fired" items={alert.signals} icon={AlertTriangle} color="var(--risk-high)" />
+            <Items title="Observations" items={alert.observations} icon={Eye} color="var(--risk-watch)" />
+            <Items title="Environmental context" items={alert.context} icon={CloudRain} color="var(--primary)" />
+            <Items title="Data confidence" items={alert.quality} icon={ShieldCheck} color="var(--risk-low)" />
           </div>
           <div className="rounded-lg border border-[color:var(--risk-watch)]/30 bg-[color:var(--risk-watch-soft)] p-3">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--risk-watch)]">
-              <ShieldCheck className="h-3.5 w-3.5" /> Verify first
+              <ListChecks className="h-3.5 w-3.5" /> Verify before deciding
             </p>
-            <ul className="mt-2 space-y-1">
-              {alert.verify_first.map((v) => (
-                <li key={v} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-[color:var(--risk-watch)]" />
+            <ol className="mt-2 list-decimal space-y-1 pl-4">
+              {alert.verify.map((v) => (
+                <li key={v} className="text-xs text-muted-foreground">
                   {v}
                 </li>
               ))}
-            </ul>
+            </ol>
           </div>
         </div>
 
-        {/* then act */}
-        <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
-          <span className="font-semibold">Then act: </span>
-          <span className="text-muted-foreground">{alert.then_act}</span>
-        </div>
-
-        {/* actions */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button
-            variant={verified ? "outline" : "default"}
-            size="sm"
-            onClick={onVerify}
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            {verified ? "Verified" : "Mark verified"}
+          <Button variant={review === "verified" ? "default" : "outline"} size="sm" onClick={() => onReview("verified")}>
+            <CheckCircle2 className="h-4 w-4" /> Signal verified
           </Button>
           <Button
+            variant={review === "not_confirmed" ? "default" : "outline"}
             size="sm"
-            disabled={!verified}
-            onClick={() =>
-              toast.success(`Response prepared — shared with the ${alert.district} district team.`)
-            }
+            onClick={() => onReview("not_confirmed")}
           >
-            <Send className="h-4 w-4" /> Prepare response
+            <XCircle className="h-4 w-4" /> Not confirmed
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link href={`/report?district=${encodeURIComponent(reportDistrict)}`} target="_blank">
-              <FileDown className="h-4 w-4" /> Export PDF
+            <Link href={`/report?district=${encodeURIComponent(alert.district)}`} target="_blank">
+              <FileDown className="h-4 w-4" /> District summary
             </Link>
           </Button>
+          <span className="text-[11px] text-muted-foreground">
+            CSV alert_label for this week: {alert.file_alert_label ?? "—"} · review choices are kept only in
+            this browser tab (not saved).
+          </span>
         </div>
-        {!verified && (
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Verify the signal before preparing a response — Umuburo AI never acts on its own.
-          </p>
-        )}
       </CardContent>
     </Card>
   );

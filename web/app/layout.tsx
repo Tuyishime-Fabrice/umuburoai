@@ -17,9 +17,9 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Umuburo AI — Malaria Early Warning",
+  title: "Umuburo AI — Malaria Surveillance Signals",
   description:
-    "Forecast malaria risk before it becomes an outbreak. An AI-powered early-warning platform that turns surveillance, historical, geographic and climate data into clear, explainable risk forecasts.",
+    "Flags unusual malaria surveillance signals from weekly district data — baseline comparison, anomaly detection and explainable alerts for the health team to verify.",
 };
 
 export default function RootLayout({

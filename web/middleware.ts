@@ -2,9 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 
 const PROTECTED = [
+  "/monitor",
   "/overview",
-  "/map",
-  "/forecast",
   "/data",
   "/upload",
   "/alerts",
@@ -29,7 +28,7 @@ export function middleware(req: NextRequest) {
 
   if (pathname === "/login" && hasSession) {
     const url = req.nextUrl.clone();
-    url.pathname = "/overview";
+    url.pathname = "/monitor";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -39,9 +38,8 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/monitor/:path*",
     "/overview/:path*",
-    "/map/:path*",
-    "/forecast/:path*",
     "/data/:path*",
     "/upload/:path*",
     "/alerts/:path*",

@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 // Base URL of the Umuburo FastAPI service (e.g. https://umuburo-api-production.up.railway.app).
-// When unset, the API routes fall back to the built-in logic in lib/.
+// When unset, the web app runs the same pipeline itself (lib/surveillance).
 const API_URL = process.env.API_URL?.trim().replace(/\/+$/, "") || "";
 const TIMEOUT_MS = 10_000;
 
@@ -31,6 +31,22 @@ export async function callApi(path: string, init?: RequestInit): Promise<NextRes
     return NextResponse.json(payload, { status: res.status, headers: { [SOURCE_HEADER]: "api" } });
   } catch (err) {
     console.error(`[api] ${path} unreachable (${err instanceof Error ? err.message : err}); using local fallback`);
+    return null;
+  }
+}
+
+/** GET JSON from the API for server-side rendering; null if not configured or failing. */
+export async function fetchApiJson<T>(path: string): Promise<T | null> {
+  if (!API_URL) return null;
+  try {
+    const res = await fetch(`${API_URL}${path}`, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) {
+      console.error(`[api] ${path} -> ${res.status}; using local pipeline`);
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    console.error(`[api] ${path} unreachable (${err instanceof Error ? err.message : err}); using local pipeline`);
     return null;
   }
 }

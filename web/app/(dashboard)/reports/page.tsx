@@ -1,181 +1,190 @@
-import Link from "next/link";
-import {
-  AlertTriangle,
-  ClipboardList,
-  Database,
-  FileDown,
-  Lightbulb,
-  ListChecks,
-  MapPin,
-  Search,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RiskBadge } from "@/components/risk-badge";
-import { getNational } from "@/lib/data";
-import { buildDashboardDistrict, type DashboardDistrict } from "@/lib/insight";
-import { PILOTS, RISK_META } from "@/lib/risk";
+import { Legend, SeriesChart } from "@/components/charts/series-chart";
+import { KpiTile } from "@/components/surveillance/kpi-tile";
+import { PageHeader } from "@/components/surveillance/page-header";
+import { chartRows, fmt, scopeName } from "@/lib/surveillance/display";
+import type { WeekPoint } from "@/lib/surveillance/types";
+import { getScopedAnalytics } from "@/lib/surveillance/source";
+import { getSession } from "@/lib/session.server";
 
-const CAT_COLOR: Record<string, string> = {
-  RESPOND: "var(--risk-high)",
-  INVESTIGATE: "var(--risk-watch)",
-  CLIMATE: "var(--primary)",
-};
+function minOf(points: WeekPoint[], get: (p: WeekPoint) => number | null) {
+  const v = points.map(get).filter((x): x is number => x !== null);
+  return v.length ? Math.min(...v) : null;
+}
 
-const URGENCY: Record<string, { label: string; color: string }> = {
-  now: { label: "Act now", color: "var(--risk-high)" },
-  soon: { label: "Act soon", color: "var(--risk-watch)" },
-  routine: { label: "Routine", color: "var(--risk-low)" },
-};
-
-const FRAMING = [
-  {
-    icon: AlertTriangle,
-    title: "Problem",
-    body: "Malaria outbreaks are often identified only after cases rise, leaving limited time to respond.",
-  },
-  {
-    icon: Lightbulb,
-    title: "AI solution",
-    body: "An AI-powered early-warning system that predicts abnormal disease patterns before outbreaks occur.",
-  },
-  {
-    icon: Database,
-    title: "Key data",
-    body: "DHIS2, eLMIS, malaria surveillance & facility reports — with rainfall and climate signals.",
-  },
-  {
-    icon: MapPin,
-    title: "Pilot scope",
-    body: "Two districts: Kirehe & Nyamasheke.",
-  },
-];
-
-export default function ReportsPage() {
-  const national = getNational();
-  const pilots = PILOTS.map((p) => buildDashboardDistrict(p)).filter(Boolean) as DashboardDistrict[];
+export default async function HealthSystemPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ district?: string }>;
+}) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const data = await getScopedAnalytics(session, (await searchParams).district);
+  const a = data.analytics;
+  const l = a.latest;
+  const w = a.weekly;
+  const stockoutWeeks = w.filter((p) => (p.stockout_days ?? 0) > 0).length;
+  const combined = a.scope === "All";
 
   return (
-    <div className="space-y-7">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        What Umuburo AI suggests, based on the latest analysis: what the model sees, what to do about
-        it, and what is likely to happen if nothing is done. Review and verify before acting.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        data={data}
+        intro="Health-system context recorded in the surveillance file: reporting, facilities, medicine stock, bed occupancy and prevention coverage. These help judge how reliable a signal is and how ready services are."
+      />
 
-      {/* framing */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {FRAMING.map((f) => {
-          const Icon = f.icon;
-          return (
-            <Card key={f.title} className="p-4">
-              <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/15 text-primary">
-                <Icon className="h-5 w-5" />
-              </div>
-              <h3 className="mt-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                {f.title}
-              </h3>
-              <p className="mt-1 text-sm leading-relaxed">{f.body}</p>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* national recommended actions */}
       <div>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-          <Lightbulb className="h-5 w-5 text-primary" /> Recommended actions
-        </h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {national.suggestions.map((s) => (
-            <Card key={s.action} className="p-5">
-              <span
-                className="text-[11px] font-bold uppercase tracking-wide"
-                style={{ color: CAT_COLOR[s.category] ?? "var(--muted-foreground)" }}
-              >
-                {s.category}
-              </span>
-              <h3 className="mt-1 font-semibold">{s.action}</h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">{s.why}</p>
-            </Card>
-          ))}
+        <h2 className="mb-3 text-lg font-semibold">Latest week · {scopeName(a.scope)}</h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <KpiTile label="Reporting completeness" value={`${fmt(l?.reporting_completeness_pct, 1)}%`} />
+          <KpiTile label="Reporting delay" value={`${fmt(l?.reporting_delay_days, 1)} days`} />
+          <KpiTile
+            label="Facilities reporting"
+            value={`${fmt(l?.facilities_reporting)} / ${fmt(l?.facilities_expected)}`}
+          />
+          <KpiTile label="Bed occupancy" value={`${fmt(l?.bed_occupancy_pct, 1)}%`} />
+          <KpiTile
+            label="ACT stock"
+            value={`${fmt(l?.act_stock_days, combined ? 1 : 0)} days`}
+            sub={`Lowest in period: ${fmt(minOf(w, (p) => p.act_stock_days), combined ? 1 : 0)} days`}
+          />
+          <KpiTile
+            label="RDT stock"
+            value={`${fmt(l?.rdt_stock_days, combined ? 1 : 0)} days`}
+            sub={`Lowest in period: ${fmt(minOf(w, (p) => p.rdt_stock_days), combined ? 1 : 0)} days`}
+          />
+          <KpiTile
+            label="Stockout days"
+            value={fmt(l?.stockout_days)}
+            sub={`${fmt(a.totals.stockout_days)} in period · ${stockoutWeeks} week(s) with a stockout`}
+          />
+          <KpiTile
+            label="Bed-net coverage / IRS"
+            value={`${fmt(l?.bed_net_coverage_pct, 1)}% / ${fmt(l?.irs_pct, 1)}%`}
+          />
         </div>
+        {combined && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            All districts: facilities and stockout days are summed; percentages, delays and stock days are
+            averaged across districts.
+          </p>
+        )}
       </div>
 
-      {/* per-pilot suggested solution */}
-      <div>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-          <ClipboardList className="h-5 w-5 text-primary" /> District suggested solutions
-        </h2>
-        <div className="grid gap-5 lg:grid-cols-2">
-          {pilots.map((d) => (
-            <Card key={d.name} style={{ borderColor: RISK_META[d.risk].color + "44" }}>
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-base">{d.name}</CardTitle>
-                <RiskBadge level={d.risk} size="sm" />
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* what the AI sees */}
-                <div>
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    <Search className="h-3.5 w-3.5" /> What the AI sees
-                  </p>
-                  <ul className="mt-1.5 space-y-1">
-                    {d.factors.slice(0, 2).map((f) => (
-                      <li key={f.label} className="text-sm text-muted-foreground">
-                        <span className="text-foreground">{f.label}:</span> {f.detail}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* what to do */}
-                <div>
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    <ListChecks className="h-3.5 w-3.5" /> What to do
-                  </p>
-                  <ul className="mt-1.5 space-y-2">
-                    {d.recommendations.slice(0, 3).map((r) => (
-                      <li key={r.action} className="flex items-start gap-2.5">
-                        <span
-                          className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={{
-                            background: URGENCY[r.urgency].color + "22",
-                            color: URGENCY[r.urgency].color,
-                          }}
-                        >
-                          {URGENCY[r.urgency].label}
-                        </span>
-                        <span className="text-sm">{r.action}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* if no action */}
-                <div
-                  className="rounded-lg p-3"
-                  style={{ background: RISK_META[d.risk].soft, color: RISK_META[d.risk].color }}
-                >
-                  <p className="text-xs font-bold uppercase tracking-wide">If no action is taken</p>
-                  <p className="mt-1 text-xs leading-relaxed text-foreground/80">
-                    {d.consequence.text}
-                  </p>
-                </div>
-
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/report?district=${encodeURIComponent(d.name)}`} target="_blank">
-                    <FileDown className="h-4 w-4" /> Export district report (PDF)
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Reporting completeness and delay</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SeriesChart
+              height={240}
+              leftUnit="%"
+              rightUnit="d"
+              data={chartRows(w, ["reporting_completeness_pct", "reporting_delay_days"])}
+              series={[
+                { key: "reporting_completeness_pct", label: "Completeness", color: "#22c55e", decimals: 1, unit: "%" },
+                { key: "reporting_delay_days", label: "Delay", color: "#f59e0b", axis: "right", dashed: true, decimals: 1, unit: " days" },
+              ]}
+              refLines={[{ y: 90, label: "90% caution line", color: "#ef4444" }]}
+            />
+            <Legend
+              items={[
+                { label: "Completeness %", color: "#22c55e" },
+                { label: "Delay, days (right axis)", color: "#f59e0b", dashed: true },
+              ]}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Facilities expected vs reporting</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SeriesChart
+              height={240}
+              data={chartRows(w, ["facilities_expected", "facilities_reporting"])}
+              series={[
+                { key: "facilities_expected", label: "Expected", color: "#94a3b8", dashed: true },
+                { key: "facilities_reporting", label: "Reporting", color: "#38bdf8" },
+              ]}
+            />
+            <Legend items={[{ label: "Expected", color: "#94a3b8", dashed: true }, { label: "Reporting", color: "#38bdf8" }]} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Medicine stock (days) and stockouts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SeriesChart
+              height={240}
+              data={chartRows(w, ["act_stock_days", "rdt_stock_days", "stockout_days"])}
+              series={[
+                { key: "stockout_days", label: "Stockout days", color: "#ef4444", type: "bar", axis: "right" },
+                { key: "act_stock_days", label: "ACT stock days", color: "#f5b301", decimals: 1 },
+                { key: "rdt_stock_days", label: "RDT stock days", color: "#a78bfa", decimals: 1 },
+              ]}
+            />
+            <Legend
+              items={[
+                { label: "ACT stock days", color: "#f5b301" },
+                { label: "RDT stock days", color: "#a78bfa" },
+                { label: "Stockout days (bars, right axis)", color: "#ef4444", dot: true },
+              ]}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Bed occupancy and malaria admissions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SeriesChart
+              height={240}
+              rightUnit="%"
+              data={chartRows(w, ["admissions", "bed_occupancy_pct"])}
+              series={[
+                { key: "admissions", label: "Malaria admissions", color: "#38bdf8", type: "bar" },
+                { key: "bed_occupancy_pct", label: "Bed occupancy", color: "#f472b6", axis: "right", decimals: 1, unit: "%" },
+              ]}
+            />
+            <Legend
+              items={[
+                { label: "Malaria admissions (bars)", color: "#38bdf8", dot: true },
+                { label: "Bed occupancy % (right axis)", color: "#f472b6" },
+              ]}
+            />
+          </CardContent>
+        </Card>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Generated from the current dataset ({national.as_of}). Prototype data · verify-before-act.
-      </p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Prevention coverage recorded in the file</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SeriesChart
+            height={220}
+            leftUnit="%"
+            data={chartRows(w, ["bed_net_coverage_pct", "irs_pct"])}
+            series={[
+              { key: "bed_net_coverage_pct", label: "Bed-net coverage", color: "#22c55e", decimals: 1, unit: "%" },
+              { key: "irs_pct", label: "Indoor residual spraying", color: "#f5b301", decimals: 1, unit: "%" },
+            ]}
+          />
+          <Legend
+            items={[
+              { label: "Bed-net coverage %", color: "#22c55e" },
+              { label: "Indoor residual spraying %", color: "#f5b301" },
+            ]}
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Values are shown as recorded. The system does not estimate the effect of prevention coverage on cases.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
