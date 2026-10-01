@@ -45,47 +45,6 @@ python model/ai_pipeline.py
 
 ---
 
-## Deploy
-
-The production app is the Next.js project in `web/`. It is self-contained (its own
-`/api/*` routes serve forecasts, uploads and the hierarchy), so it does not need the
-FastAPI service.
-
-**Railway**
-
-Each folder is its own Railway service with a `railway.json` (build/start/healthcheck):
-
-1. Railway → **New Project → Deploy from GitHub repo** → pick this repo.
-2. Open the service → **Settings**:
-   - **Root Directory:** `/web`
-   - **Config file path:** `/web/railway.json` (Railway does not look inside the root directory for it)
-3. **Settings → Networking → Generate Domain** to get the public URL.
-4. *(Optional API)* In the same project: **+ New → GitHub Repo** → same repo, Root Directory `/backend`,
-   config file path `/backend/railway.json`, then Generate Domain. Docs are at `/docs`.
-
-No environment variables are required; Railway sets `PORT` automatically.
-
-**Vercel**
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftuyishime-fabrice%2Fumuburoai&root-directory=web)
-
-Or import the repo in Vercel and set **Root Directory** to `web`. No environment variables are needed.
-
-**Render (web app + API together)**
-
-`render.yaml` is a Blueprint: Render dashboard → **New → Blueprint** → pick this repo.
-It creates `umuburo-web` (Next.js) and `umuburo-api` (FastAPI, docs at `/docs`).
-
-**Run locally**
-
-```bash
-cd web && npm ci && npm run build && npm start          # http://localhost:3000
-cd backend && pip install -r requirements.txt \
-  && uvicorn main:app --port 8000                        # http://localhost:8000/docs
-```
-
----
-
 ## The demo story (what to show judges)
 1. **Sign in (credential login)** — a username + password form with **7 demo accounts across every level**: Super User, RBC National, District (Huye/Kirehe), Sector, Cell, Village CHW. Click a demo account to autofill; each sees only its authorised scope (RBAC). e.g. `rbc.national` / `rbc@2026`, or `admin` / `admin@123`.
 2. **Overview (national)** — risk map with **Huye HIGH** (pulsing red); incidence 76/1,000; national anomaly + **1–4 week forecast**.
