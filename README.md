@@ -51,7 +51,21 @@ The production app is the Next.js project in `web/`. It is self-contained (its o
 `/api/*` routes serve forecasts, uploads and the hierarchy), so it does not need the
 FastAPI service.
 
-**Vercel (recommended for the web app)**
+**Railway**
+
+Each folder is its own Railway service with a `railway.json` (build/start/healthcheck):
+
+1. Railway → **New Project → Deploy from GitHub repo** → pick this repo.
+2. Open the service → **Settings**:
+   - **Root Directory:** `/web`
+   - **Config file path:** `/web/railway.json` (Railway does not look inside the root directory for it)
+3. **Settings → Networking → Generate Domain** to get the public URL.
+4. *(Optional API)* In the same project: **+ New → GitHub Repo** → same repo, Root Directory `/backend`,
+   config file path `/backend/railway.json`, then Generate Domain. Docs are at `/docs`.
+
+No environment variables are required; Railway sets `PORT` automatically.
+
+**Vercel**
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftuyishime-fabrice%2Fumuburoai&root-directory=web)
 
