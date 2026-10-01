@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 // Base URL of the Umuburo FastAPI service (e.g. https://umuburo-api-production.up.railway.app).
-// When unset, the web app runs the same pipeline itself (lib/surveillance).
+// When unset (or unreachable), the web app runs the same pipeline itself (lib/surveillance).
 const API_URL = process.env.API_URL?.trim().replace(/\/+$/, "") || "";
 const TIMEOUT_MS = 10_000;
 
@@ -35,11 +35,17 @@ export async function callApi(path: string, init?: RequestInit): Promise<NextRes
   }
 }
 
-/** GET JSON from the API for server-side rendering; null if not configured or failing. */
-export async function fetchApiJson<T>(path: string): Promise<T | null> {
+/** POST JSON to the API for server-side rendering; null if not configured or failing. */
+export async function postApiJson<T>(path: string, body: unknown): Promise<T | null> {
   if (!API_URL) return null;
   try {
-    const res = await fetch(`${API_URL}${path}`, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const res = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (!res.ok) {
       console.error(`[api] ${path} -> ${res.status}; using local pipeline`);
       return null;
@@ -48,6 +54,17 @@ export async function fetchApiJson<T>(path: string): Promise<T | null> {
   } catch (err) {
     console.error(`[api] ${path} unreachable (${err instanceof Error ? err.message : err}); using local pipeline`);
     return null;
+  }
+}
+
+/** Whether an analytics API is configured and answering. */
+export async function apiStatus(): Promise<"not_configured" | "online" | "offline"> {
+  if (!API_URL) return "not_configured";
+  try {
+    const res = await fetch(`${API_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    return res.ok ? "online" : "offline";
+  } catch {
+    return "offline";
   }
 }
 

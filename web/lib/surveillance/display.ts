@@ -27,11 +27,11 @@ export const LEVEL_META: Record<
     description: "No case-based rule fired this week.",
   },
   INSUFFICIENT: {
-    label: "Insufficient history",
-    short: "Insufficient",
+    label: "Not evaluated",
+    short: "Not evaluated",
     color: "var(--muted-foreground)",
     soft: "var(--muted)",
-    description: "Fewer than 4 earlier weeks, so there is no baseline to compare against.",
+    description: "Fewer than 4 earlier fully reported weeks, so there is no baseline to compare against.",
   },
 };
 
@@ -66,11 +66,23 @@ export function fmtDate(iso: string | null | undefined, withYear = true): string
   return `${d} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ""}`;
 }
 
-export function scopeName(scope: string): string {
-  return scope === "All" ? "All districts" : scope;
+/** Add or replace query parameters on a path. */
+export function withParams(path: string, params: Record<string, string | null | undefined>): string {
+  const [base, qs] = path.split("?");
+  const sp = new URLSearchParams(qs ?? "");
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined || v === "") sp.delete(k);
+    else sp.set(k, v);
+  }
+  const s = sp.toString();
+  return s ? `${base}?${s}` : base;
 }
 
-/** Plain rows for charts: week, epi week, signal level and the requested fields. */
+/**
+ * Plain rows for charts: week, epi week, signal level and the requested fields.
+ * Weeks that not every reporting district has submitted are left blank, so a partial
+ * week never looks like a drop in the combined series.
+ */
 export function chartRows<K extends keyof WeekPoint>(
   points: WeekPoint[],
   keys: K[],
@@ -81,7 +93,12 @@ export function chartRows<K extends keyof WeekPoint>(
       epi_week: p.epi_week,
       level: p.signal.level,
     };
-    for (const k of keys) row[k as string] = p[k] as number | null;
+    for (const k of keys) row[k as string] = p.complete ? (p[k] as number | null) : null;
     return row;
   });
+}
+
+/** The formatted text, or "Not reported" when none of the underlying values were supplied. */
+export function shown(values: (number | null | undefined)[], text: string): string {
+  return values.every((v) => v === null || v === undefined) ? "Not reported" : text;
 }

@@ -43,7 +43,7 @@ export default function LandingPage() {
         </div>
 
         <p className="mt-6 text-xs text-slate-300/80">
-          Current analytics are calculated from a weekly district surveillance test dataset.
+          Weekly district surveillance · early-warning signals · verification workflow
         </p>
       </div>
     </div>

@@ -1,9 +1,8 @@
 // Types for the surveillance analytics pipeline. Every value here is read from,
-// or calculated from, the surveillance CSV — see pipeline.ts for the rules.
+// or calculated from, the uploaded surveillance datasets — see pipeline.ts.
 
 export type SignalLevel = "ELEVATED" | "WATCH" | "NONE" | "INSUFFICIENT";
-
-export type Scope = string; // "All" or a district name present in the dataset
+export type ScopeLevel = "national" | "province" | "district";
 
 /** One cleaned CSV row. Missing or invalid cells are null. */
 export interface WeekRecord {
@@ -60,14 +59,50 @@ export interface CleaningSummary {
   rowsKept: number;
   droppedInvalidKey: number;
   droppedDuplicate: number;
+  droppedUnknownDistrict: number;
+  droppedOutsideScope: number;
   valuesSetToNull: number;
 }
 
-/** One week of the selected scope (one district, or all districts combined). */
+/** Input dataset for the pipeline (an upload). */
+export interface DatasetInput {
+  id: string;
+  name: string;
+  csv: string;
+  /** Rows for other districts are excluded (uploads by district users). */
+  restrictDistrict?: string | null;
+}
+
+export interface DatasetSummary {
+  id: string;
+  name: string;
+  accepted: boolean;
+  columns: string[];
+  missingOptionalColumns: string[];
+  districts: string[];
+  period: { start: string | null; end: string | null };
+  cleaning: CleaningSummary;
+  validation: ValidationCheck[];
+  /** District-weeks from this dataset that a later upload replaced. */
+  superseded: number;
+}
+
+export interface ScopeOption {
+  id: string;
+  label: string;
+  level: ScopeLevel;
+  province: string | null;
+  hasData: boolean;
+}
+
+/** One week of the selected scope (one district, or several districts combined). */
 export interface WeekPoint {
   week_start: string;
   epi_week: number | null;
   districts_reporting: number;
+  districts_expected: number;
+  /** All districts with data in the scope reported this week. */
+  complete: boolean;
   population: number | null;
   suspected: number | null;
   tested: number | null;
@@ -79,6 +114,8 @@ export interface WeekPoint {
   positivity_pct: number | null;
   testing_rate_pct: number | null;
   incidence_per_1000: number | null;
+  opd_malaria_share_pct: number | null;
+  severe_pct_of_confirmed: number | null;
   rainfall_mm: number | null;
   rainfall_4wk_avg: number | null;
   temperature_c: number | null;
@@ -97,7 +134,7 @@ export interface WeekPoint {
   bed_occupancy_pct: number | null;
   bed_net_coverage_pct: number | null;
   irs_pct: number | null;
-  /** Provided label column: 0/1 for one district; number of districts labelled 1 for All. */
+  /** Provided label column: 0/1 for one district; number of districts labelled 1 otherwise. */
   file_alert_label: number | null;
   // features
   cases_ma4: number | null;
@@ -133,6 +170,7 @@ export interface WeekSignal {
 export interface SurveillanceAlert {
   id: string;
   district: string;
+  province: string;
   week_start: string;
   epi_week: number | null;
   level: Exclude<SignalLevel, "NONE" | "INSUFFICIENT">;
@@ -143,12 +181,14 @@ export interface SurveillanceAlert {
   context: SignalItem[];
   quality: SignalItem[];
   verify: string[];
+  /** The alert is for the most recent week reported by its district. */
   isLatestWeek: boolean;
   file_alert_label: number | null;
 }
 
 export interface Totals {
   weeks: number;
+  partial_weeks: number;
   suspected: number | null;
   tested: number | null;
   confirmed: number | null;
@@ -160,6 +200,10 @@ export interface Totals {
   testing_rate_pct: number | null;
   /** Cumulative incidence over the period per 1,000 (Σ confirmed ÷ mean weekly population). */
   incidence_per_1000: number | null;
+  severe_pct_of_confirmed: number | null;
+  deaths_per_1000_confirmed: number | null;
+  admissions_per_100_confirmed: number | null;
+  opd_malaria_share_pct: number | null;
   stockout_days: number | null;
   missing_weeks: Record<string, number>;
 }
@@ -167,20 +211,69 @@ export interface Totals {
 export interface LagCorrelation {
   variable: string;
   label: string;
+  group: "environment" | "prevention";
   unit: string;
   lags: { lag: number; r: number | null; n: number }[];
   best: { lag: number; r: number; n: number } | null;
   strength: "weak" | "moderate" | "strong" | "insufficient";
 }
 
-export interface DistrictComparison {
+export interface DistrictStatus {
   district: string;
+  province: string;
+  hasData: boolean;
+  weeks: number;
+  first_week: string | null;
+  latest_week: string | null;
+  days_since_latest: number | null;
+  stale: boolean;
   latest_confirmed: number | null;
   latest_change_vs_baseline_pct: number | null;
-  latest_level: SignalLevel;
-  totals: Totals;
+  latest_level: SignalLevel | null;
+  recent_incidence_per_1000: number | null;
+  recent_positivity_pct: number | null;
   mean_reporting_completeness_pct: number | null;
   alerts: number;
+  totals: Totals | null;
+}
+
+export interface PriorityRow {
+  rank: number;
+  district: string;
+  province: string;
+  level: SignalLevel;
+  recent_incidence_per_1000: number | null;
+  recent_positivity_pct: number | null;
+  bed_net_coverage_pct: number | null;
+  irs_pct: number | null;
+  act_stock_days: number | null;
+  rdt_stock_days: number | null;
+  review_points: string[];
+}
+
+export interface ForecastHorizon {
+  h: number;
+  week_start: string;
+  estimate: number | null;
+  lower: number | null;
+  upper: number | null;
+  shown: boolean;
+  backtest: { n: number; mae: number | null; mape_pct: number | null; naive_mae: number | null; skill_pct: number | null };
+}
+
+export interface Forecast {
+  available: boolean;
+  reason: string | null;
+  features: string[];
+  origin_week: string | null;
+  horizons: ForecastHorizon[];
+}
+
+export interface Coverage {
+  districts_total: number;
+  districts_with_data: number;
+  districts_reporting_latest_week: number;
+  by_province: { province: string; districts_total: number; districts_with_data: number }[];
 }
 
 export interface ColumnMissing {
@@ -196,6 +289,8 @@ export interface DataQuality {
   weeks_per_district: Record<string, number>;
   missing_values_total: number;
   missing_by_column: ColumnMissing[];
+  /** Columns that no active dataset supplied (analyses needing them are unavailable). */
+  columns_not_supplied: string[];
   reporting_completeness: { mean: number | null; min: number | null; weeks_below_90: number };
   reporting_delay_days: { mean: number | null; max: number | null; weeks_above_3: number };
   facilities: {
@@ -204,7 +299,6 @@ export interface DataQuality {
     reporting_rate_pct: number | null;
   };
   validation: ValidationCheck[];
-  cleaning: CleaningSummary;
 }
 
 export interface MethodRule {
@@ -219,19 +313,28 @@ export interface PipelineStage {
 }
 
 export interface Analytics {
-  scope: Scope;
-  scopes: string[];
-  districts: string[];
-  source: { file: string; rows: number; columns: number };
+  scope: ScopeOption;
+  scopeOptions: ScopeOption[];
+  /** Reference districts in the scope (with or without data). */
+  districtsInScope: string[];
+  /** Districts in the scope that have records. */
+  districtsWithData: string[];
+  hasData: boolean;
+  today: string;
+  sources: DatasetSummary[];
+  coverage: Coverage;
+  freshness: { latest_week: string | null; days_since_latest: number | null; stale: boolean };
   period: { start: string | null; end: string | null; weeks: number };
   latest: WeekPoint | null;
   weekly: WeekPoint[];
   totals: Totals;
-  /** Latest-week signal per district in scope (one entry for a single district). */
-  districtSignals: { district: string; latest: WeekPoint | null }[];
+  districts: DistrictStatus[];
+  /** Latest-week signal per district with data in scope. */
+  districtSignals: { district: string; province: string; latest: WeekPoint | null }[];
   alerts: SurveillanceAlert[];
   relationships: LagCorrelation[];
-  comparison: DistrictComparison[];
+  prioritisation: PriorityRow[];
+  forecast: Forecast;
   quality: DataQuality;
   pipeline: PipelineStage[];
   method: MethodRule[];

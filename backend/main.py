@@ -1,8 +1,11 @@
 """Umuburo AI — malaria surveillance analytics API (FastAPI).
 
-Every figure is calculated from the surveillance CSV in data/ by analytics.py
-(validation → cleaning → features → baseline → anomaly → signal → alert). There is
-no other data source, no forecast and no live system connection.
+A stateless analytics engine. POST /api/analyze takes uploaded surveillance datasets
+(CSV text) and a scope (national, a province or a district) and returns the full
+analysis: validation, weekly series, signals, alerts, relationships, prioritisation,
+backtested projection and data quality (see analytics.py).
+
+GET endpoints analyse the reference dataset bundled in data/ for quick inspection.
 
 Run:
     pip install -r requirements.txt
@@ -12,12 +15,13 @@ Then open http://localhost:8000/docs
 from __future__ import annotations
 
 import os
+from datetime import date
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import analytics
 
@@ -25,14 +29,16 @@ DATASET_FILE = "rwanda_malaria_surveillance_testing_data.csv"
 DATA_PATH = os.environ.get("SURVEILLANCE_CSV") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "data", DATASET_FILE
 )
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 app = FastAPI(
     title="Umuburo AI API",
-    version="2.0.0",
+    version="3.0.0",
     description=(
-        "Malaria surveillance analytics for Nyagatare and Muhanga, calculated from the weekly "
-        f"surveillance CSV ({DATASET_FILE}). Signals flag unusual patterns for the district "
-        "health team to verify — they are not confirmed outbreaks, and nothing is forecast."
+        "Malaria surveillance analytics for Rwanda's 30 districts. Uploaded weekly district "
+        "surveillance data is validated, combined and analysed: baseline comparison, anomaly "
+        "detection, explainable signals for verification, environmental relationships, "
+        "prevention prioritisation and a backtested short-term projection."
     ),
 )
 
@@ -46,18 +52,39 @@ app.add_middleware(
 _cache: dict = {}
 
 
-def dataset() -> dict:
-    """Validated + cleaned records, re-read whenever the file changes on disk."""
+def reference_datasets() -> list[dict]:
+    """The bundled reference dataset as pipeline input (re-read when the file changes)."""
     try:
         st = os.stat(DATA_PATH)
     except FileNotFoundError:
-        raise HTTPException(503, f"Surveillance dataset not found at {DATA_PATH}")
+        raise HTTPException(503, f"Reference dataset not found at {DATA_PATH}")
     key = (DATA_PATH, st.st_mtime_ns, st.st_size)
     if _cache.get("key") != key:
         with open(DATA_PATH, encoding="utf-8") as f:
-            _cache["clean"] = analytics.validate_and_clean(f.read())
+            _cache["datasets"] = [{"id": "reference", "name": DATASET_FILE, "csv": f.read()}]
         _cache["key"] = key
-    return _cache["clean"]
+    return _cache["datasets"]
+
+
+def check_today(today: Optional[str]) -> str:
+    if not today:
+        return date.today().isoformat()
+    if not analytics.is_valid_date(today):
+        raise HTTPException(422, "today must be a YYYY-MM-DD date")
+    return today
+
+
+class DatasetIn(BaseModel):
+    id: str
+    name: str
+    csv: str
+    restrictDistrict: Optional[str] = None
+
+
+class AnalyzeRequest(BaseModel):
+    datasets: list[DatasetIn] = Field(default_factory=list)
+    scope: Optional[str] = "national"
+    today: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -68,12 +95,10 @@ class LoginRequest(BaseModel):
 # --------------------------------------------------------------------------- routes
 @app.get("/", tags=["meta"])
 def root():
-    clean = dataset()
     return {
         "product": "Umuburo AI",
-        "purpose": "Flag unusual malaria surveillance signals for human verification.",
-        "dataset": DATASET_FILE,
-        "districts": analytics.districts_in(clean),
+        "purpose": "Flag unusual malaria surveillance signals for verification by health teams.",
+        "districts": len(analytics.DISTRICTS),
         "docs": "/docs",
     }
 
@@ -83,29 +108,48 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/api/analytics", tags=["analytics"])
-def get_analytics(district: Optional[str] = Query("All", description="All, or a district in the dataset")):
-    """Full analytics for a scope: weekly series, signals, alerts, data quality, relationships."""
-    return analytics.analyze(dataset(), district, DATASET_FILE)
+@app.post("/api/analyze", tags=["analytics"])
+def analyze(req: AnalyzeRequest):
+    """Analyse uploaded datasets (in upload order) for a scope."""
+    total = sum(len(d.csv) for d in req.datasets)
+    if total > MAX_UPLOAD_BYTES * 8:
+        raise HTTPException(413, "Datasets too large")
+    combined = analytics.combine([d.model_dump() for d in req.datasets])
+    return analytics.analyze(combined, req.scope, check_today(req.today))
 
 
-@app.get("/api/alerts", tags=["analytics"])
-def get_alerts(district: Optional[str] = Query("All")):
-    a = analytics.analyze(dataset(), district, DATASET_FILE)
+@app.get("/api/analytics", tags=["reference data"])
+def get_analytics(
+    scope: Optional[str] = Query(None, description="national, province:<name> or district:<name>"),
+    district: Optional[str] = Query(None, description="Deprecated alias for a district or province name"),
+    today: Optional[str] = Query(None, description="Reference date (YYYY-MM-DD) for data freshness"),
+):
+    combined = analytics.combine(reference_datasets())
+    return analytics.analyze(combined, scope or district or "national", check_today(today))
+
+
+@app.get("/api/alerts", tags=["reference data"])
+def get_alerts(scope: Optional[str] = Query("national"), today: Optional[str] = Query(None)):
+    a = analytics.analyze(analytics.combine(reference_datasets()), scope, check_today(today))
     return {"scope": a["scope"], "alerts": a["alerts"]}
 
 
-@app.get("/api/data-quality", tags=["analytics"])
-def get_quality(district: Optional[str] = Query("All")):
-    a = analytics.analyze(dataset(), district, DATASET_FILE)
-    return a["quality"]
+@app.get("/api/data-quality", tags=["reference data"])
+def get_quality(scope: Optional[str] = Query("national"), today: Optional[str] = Query(None)):
+    a = analytics.analyze(analytics.combine(reference_datasets()), scope, check_today(today))
+    return {"sources": a["sources"], "quality": a["quality"]}
 
 
-@app.get("/api/dataset", tags=["data"])
+@app.get("/api/dataset", tags=["reference data"])
 def download_dataset():
-    """The source CSV, unchanged — every figure can be traced back to it."""
-    dataset()
+    """The bundled reference CSV, unchanged."""
+    reference_datasets()
     return FileResponse(DATA_PATH, media_type="text/csv", filename=DATASET_FILE)
+
+
+@app.get("/api/districts", tags=["reference data"])
+def list_districts():
+    return analytics.DISTRICTS
 
 
 @app.post("/api/auth/login", tags=["auth"])
@@ -121,40 +165,32 @@ def login(req: LoginRequest):
     return {"email": req.email, **acc}
 
 
-# --------------------------------------------------------------------------- upload
-def upload_report(name: str, raw: bytes) -> dict:
-    """Check an uploaded file against the surveillance schema. Nothing is stored."""
+# --------------------------------------------------------------------------- upload check
+def upload_report(name: str, raw: bytes, restrict_district: Optional[str]) -> dict:
+    """Validate an uploaded file against the surveillance format. Nothing is stored here."""
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     size_kb = int(analytics.rnd(len(raw) / 1024, 0))
     if ext != "csv":
         fmt = ext.upper() or "Unknown"
         return {
             "kind": "unsupported", "format": fmt, "fileName": name, "sizeKB": size_kb,
-            "note": "Only CSV files in the surveillance format can be validated. This file was not read and nothing was stored.",
-            "issues": [{"level": "error", "label": "Format", "detail": f"{fmt} files are not processed."}],
+            "note": "Only CSV files in the weekly surveillance format can be imported.",
+            "issues": [{"level": "error", "label": "Format", "detail": f"{fmt} files are not supported."}],
         }
     text = raw.decode("utf-8", "replace")
-    clean = analytics.validate_and_clean(text)
+    v = analytics.validate_dataset({"id": "upload", "name": name, "csv": text, "restrictDistrict": restrict_district})
     table = analytics.parse_csv(text)
-    header = clean["header"]
+    header = v["header"]
     preview = [
         {header[i]: (r[i] if i < len(r) else "") for i in range(len(header))}
         for r in table[1:9]
     ]
-    dates = sorted(r["week_start"] for r in clean["records"])
-    return {
-        "kind": "dataset", "format": "CSV", "fileName": name,
-        "rowCount": clean["cleaning"]["rowsRead"],
-        "columns": header,
-        "preview": preview,
-        "issues": [{"level": v["level"], "label": v["check"], "detail": v["detail"]} for v in clean["validation"]],
-        "cleaning": clean["cleaning"],
-        "districts": analytics.districts_in(clean),
-        "period": {"start": dates[0] if dates else None, "end": dates[-1] if dates else None},
-    }
+    return {"kind": "dataset", "format": "CSV", "fileName": name, "summary": v["summary"], "preview": preview}
 
 
-@app.post("/api/upload", tags=["upload"])
-async def upload(file: UploadFile = File(...)):
+@app.post("/api/validate", tags=["upload"])
+async def validate(file: UploadFile = File(...), restrict_district: Optional[str] = Form(None)):
     raw = await file.read()
-    return upload_report(file.filename or "upload", raw)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "File exceeds 25 MB")
+    return upload_report(file.filename or "upload", raw, restrict_district)

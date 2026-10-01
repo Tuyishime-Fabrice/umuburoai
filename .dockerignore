@@ -4,3 +4,4 @@
 **/__pycache__
 *.pptx
 *.zip
+**/storage
