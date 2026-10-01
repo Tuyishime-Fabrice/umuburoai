@@ -1,0 +1,77 @@
+import Link from "next/link";
+import { ArrowRight, MapPin, ShieldCheck, TrendingUp } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
+import { PhotoBackdrop } from "@/components/brand/photo-backdrop";
+import { Button } from "@/components/ui/button";
+
+const STATS = [
+  { icon: MapPin, label: "2 pilot districts", sub: "Kirehe & Nyamasheke" },
+  { icon: TrendingUp, label: "1–8 week forecast", sub: "cases before they rise" },
+  { icon: ShieldCheck, label: "Verify-before-act", sub: "people make the call" },
+];
+
+export default function LandingPage() {
+  return (
+    <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden px-5 text-center">
+      {/* rotating mosquito photo background (CDC/PHIL, public domain) */}
+      <PhotoBackdrop />
+
+      <div className="relative z-10 flex w-full max-w-3xl flex-col items-center [text-shadow:0_1px_18px_rgba(0,0,0,0.55)]">
+        {/* logo with glow */}
+        <div className="relative inline-flex items-center justify-center">
+          <div aria-hidden="true" className="absolute -inset-6 rounded-full bg-primary/15 blur-3xl" />
+          <Logo className="relative h-14 w-auto drop-shadow-[0_2px_24px_rgba(0,0,0,0.7)] sm:h-16" />
+        </div>
+
+        <span className="mt-5 inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3.5 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-dot" />
+          Malaria early-warning intelligence · Rwanda
+        </span>
+
+        <h1 className="mt-4 text-balance text-3xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl">
+          Forecast malaria risk <span className="text-primary">before</span> it becomes an outbreak.
+        </h1>
+
+        <p className="mt-4 max-w-xl text-pretty text-sm leading-relaxed text-slate-200/90 sm:text-base">
+          Umuburo AI turns surveillance, historical, geographic and climate data into clear,
+          three-week risk forecasts for Kirehe and Nyamasheke — so district teams can act early.
+        </p>
+
+        <div className="mt-6 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
+          <Button asChild size="lg" className="h-11 w-full px-8 text-base sm:w-auto">
+            <Link href="/login">
+              Request Access <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="h-11 w-full px-8 text-base sm:w-auto">
+            <Link href="/login">Login</Link>
+          </Button>
+        </div>
+
+        <div className="mt-7 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+          {STATS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <div
+                key={s.label}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card/70 px-3.5 py-2.5 text-left backdrop-blur-sm"
+              >
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{s.label}</p>
+                  <p className="text-xs text-muted-foreground">{s.sub}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-6 text-xs text-slate-300/80">
+          Grounded in the national Malaria &amp; NTD Annual Report (FY2023-24).
+        </p>
+      </div>
+    </div>
+  );
+}
