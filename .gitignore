@@ -6,6 +6,3 @@ coverage/
 .env
 .env.*
 !.env.example
-__pycache__/
-*.pyc
-.venv/
